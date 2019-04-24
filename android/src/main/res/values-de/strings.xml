@@ -24,4 +24,8 @@
     <string name="fingerprint_error_no_fingerprints" msgid="3350805046152877040">"Keine Fingerabdrücke erfasst."</string>
     <string name="fingerprint_error_hw_not_present" msgid="1176237289575184578">"Dieses Gerät hat keinen Fingerabdrucksensor"</string>
     <string name="fingerprint_error_user_canceled" msgid="3421037373085129417">"Vorgang der Fingerabdruckauthentifizierung vom Nutzer abgebrochen."</string>
+    <string name="fingerprint_error_lockout">Fingerabdruck ist gesperrt. Bitte versuche es später erneut.</string>
+    <string name="default_error_msg">Beim Authentifizieren ist ein Fehler aufgetreten.</string>
+    <string name="fingerprint_prompt_negative_button">Abbrechen</string>
+    <string name="fingerprint_prompt_title">Entsperre die App</string>
 </resources>

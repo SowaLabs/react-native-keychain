@@ -33,5 +33,8 @@
     <!-- Generic error message shown when the fingerprint authentication operation is canceled due to user input. Generally not shown to the user. [CHAR LIMIT=NONE] -->
     <string name="fingerprint_error_user_canceled">Fingerprint operation canceled by user.</string>
     <string name="default_error_msg">There was an error while authenticating.</string>
-    <string name="fingerprint_error_lockout">Fingerprint is locked out. Please try again later.</string>
+    <string name="fingerprint_error_lockout">Fingerprint is locked. Please try again later.</string>
+    <string name="fingerprint_prompt_title">Unlock the app</string>
+    <string name="fingerprint_prompt_subtitle"></string>
+    <string name="fingerprint_prompt_negative_button">Cancel</string>
 </resources>

@@ -20,6 +20,7 @@ import android.support.v4.app.FragmentActivity;
 import com.facebook.react.bridge.ReactApplicationContext;
 
 import com.facebook.react.bridge.ReactContext;
+import com.oblador.keychain.R;
 import com.oblador.keychain.exceptions.CryptoFailedException;
 import com.oblador.keychain.exceptions.KeyStoreAccessException;
 import com.oblador.keychain.supportBiometric.BiometricPrompt;
@@ -141,9 +142,9 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
         mBiometricPromptCancellationSignal = new CancellationSignal();
 
         PromptInfo promptInfo = new PromptInfo.Builder()
-                .setTitle("Authentication required")
-                .setNegativeButtonText("Cancel")
-                .setSubtitle("Please use biometric authentication to unlock the app")
+                .setTitle(mActivity.getString(R.string.fingerprint_prompt_title))
+                .setNegativeButtonText(mActivity.getString(R.string.fingerprint_prompt_negative_button))
+                .setSubtitle(mActivity.getString(R.string.fingerprint_prompt_subtitle))
                 .build();
 
         mBiometricPrompt.authenticate(promptInfo);
