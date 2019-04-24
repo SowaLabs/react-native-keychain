@@ -28,6 +28,7 @@ import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.support.annotation.RequiresApi;
 import android.support.annotation.RestrictTo;
 import android.support.v4.content.ContextCompat;
@@ -90,6 +91,10 @@ public class FingerprintDialogFragment extends DialogFragment {
     }
 
     final class H extends Handler {
+        public H() {
+            super(Looper.getMainLooper());
+        }
+
         @Override
         public void handleMessage(android.os.Message msg) {
             switch (msg.what) {
