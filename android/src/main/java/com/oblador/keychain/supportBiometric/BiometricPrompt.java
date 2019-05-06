@@ -20,9 +20,6 @@ import static java.lang.annotation.RetentionPolicy.SOURCE;
 
 import android.app.Activity;
 import android.app.FragmentManager;
-import android.arch.lifecycle.Lifecycle;
-import android.arch.lifecycle.LifecycleObserver;
-import android.arch.lifecycle.OnLifecycleEvent;
 import android.content.DialogInterface;
 import android.os.Build;
 import android.os.Bundle;
