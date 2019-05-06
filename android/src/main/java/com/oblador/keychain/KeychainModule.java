@@ -2,6 +2,7 @@ package com.oblador.keychain;
 
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.os.AsyncTask;
 import android.os.Build;
 import android.support.annotation.NonNull;
 import android.support.annotation.RequiresApi;
@@ -76,32 +77,38 @@ public class KeychainModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
-    public void setGenericPasswordForOptions(String service, String username, String password, ReadableMap options, Promise promise) {
-        try {
-            if (username == null || username.isEmpty() || password == null || password.isEmpty()) {
-                throw new EmptyParameterException("you passed empty or null username/password");
+    public void setGenericPasswordForOptions(final String service, final String username, final String password, final ReadableMap options, final Promise promise) {
+        // currentCipherStorage.encrypt() takes a couple of seconds to complete, run on a background thread so not to block the UI
+        AsyncTask.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (username == null || username.isEmpty() || password == null || password.isEmpty()) {
+                        throw new EmptyParameterException("you passed empty or null username/password");
+                    }
+
+                    String accessControl = null;
+                    if (options != null && options.hasKey(ACCESS_CONTROL_KEY)) {
+                        accessControl = options.getString(ACCESS_CONTROL_KEY);
+                    }
+
+                    String resolvedService = getDefaultServiceIfNull(service);
+
+                    CipherStorage currentCipherStorage = getCipherStorageForCurrentAPILevel(getUseBiometry(accessControl));
+
+                    EncryptionResult result = currentCipherStorage.encrypt(resolvedService, username, password);
+                    prefsStorage.storeEncryptedEntry(resolvedService, result);
+
+                    promise.resolve(true);
+                } catch (EmptyParameterException e) {
+                    Log.e(KEYCHAIN_MODULE, e.getMessage());
+                    promise.reject(E_EMPTY_PARAMETERS, e);
+                } catch (CryptoFailedException e) {
+                    Log.e(KEYCHAIN_MODULE, e.getMessage());
+                    promise.reject(E_CRYPTO_FAILED, e);
+                }
             }
-
-            String accessControl = null;
-            if (options != null && options.hasKey(ACCESS_CONTROL_KEY)) {
-                accessControl = options.getString(ACCESS_CONTROL_KEY);
-            }
-
-            service = getDefaultServiceIfNull(service);
-
-            CipherStorage currentCipherStorage = getCipherStorageForCurrentAPILevel(getUseBiometry(accessControl));
-
-            EncryptionResult result = currentCipherStorage.encrypt(service, username, password);
-            prefsStorage.storeEncryptedEntry(service, result);
-
-            promise.resolve(true);
-        } catch (EmptyParameterException e) {
-            Log.e(KEYCHAIN_MODULE, e.getMessage());
-            promise.reject(E_EMPTY_PARAMETERS, e);
-        } catch (CryptoFailedException e) {
-            Log.e(KEYCHAIN_MODULE, e.getMessage());
-            promise.reject(E_CRYPTO_FAILED, e);
-        }
+        });
     }
 
     @ReactMethod
