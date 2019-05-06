@@ -443,13 +443,18 @@ public class BiometricPrompt implements BiometricConstants, LifecycleEventListen
      *             {@link BiometricPrompt.PromptInfo.Builder}.
      * @param crypto The crypto object associated with the authentication.
      */
-    public void authenticate(@NonNull PromptInfo info, @NonNull CryptoObject crypto) {
+    public void authenticate(@NonNull final PromptInfo info, @NonNull final CryptoObject crypto) {
         if (info == null) {
             throw new IllegalArgumentException("PromptInfo can not be null");
         } else if (crypto == null) {
             throw new IllegalArgumentException("CryptoObject can not be null");
         }
-        authenticateInternal(info, crypto);
+        // fragmentManager.executePendingTransactions() requires to be run on main thread
+        mActivity.runOnUiThread(new Runnable() {
+            public void run() {
+                authenticateInternal(info, crypto);
+            }
+        });
     }
 
     /**
@@ -458,11 +463,16 @@ public class BiometricPrompt implements BiometricConstants, LifecycleEventListen
      * @param info The information that will be displayed on the prompt. Create this object using
      *             {@link BiometricPrompt.PromptInfo.Builder}.
      */
-    public void authenticate(@NonNull PromptInfo info) {
+    public void authenticate(@NonNull final PromptInfo info) {
         if (info == null) {
             throw new IllegalArgumentException("PromptInfo can not be null");
         }
-        authenticateInternal(info, null /* crypto */);
+        // fragmentManager.executePendingTransactions() requires to be run on main thread
+        mActivity.runOnUiThread(new Runnable() {
+            public void run() {
+                authenticateInternal(info, null /* crypto */);
+            }
+        });
     }
 
     private void authenticateInternal(@NonNull PromptInfo info, @Nullable CryptoObject crypto) {
@@ -539,12 +549,7 @@ public class BiometricPrompt implements BiometricConstants, LifecycleEventListen
         }
         // For the case when onResume() is being called right after authenticate,
         // we need to make sure that all fragment transactions have been committed.
-        mActivity.runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                fragmentManager.executePendingTransactions();
-            }
-        });
+        fragmentManager.executePendingTransactions();
     }
 
     /**
