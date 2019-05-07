@@ -139,7 +139,7 @@ public class KeychainModule extends ReactContextBaseJavaModule {
             if (currentCipherStorage != null) {
                 DecryptionResultHandler decryptionHandler = new DecryptionResultHandler() {
                     @Override
-                    public void onDecrypt(DecryptionResult decryptionResult, String error) {
+                    public void onDecrypt(DecryptionResult decryptionResult, String errorMessage, String errorCode) {
                         if (decryptionResult != null) {
                             WritableMap credentials = Arguments.createMap();
 
@@ -149,7 +149,7 @@ public class KeychainModule extends ReactContextBaseJavaModule {
 
                             promise.resolve(credentials);
                         } else {
-                            promise.reject(E_CRYPTO_FAILED, error);
+                            promise.reject(errorCode != null ? errorCode : E_CRYPTO_FAILED, errorMessage);
                         }
                     }
                 };
@@ -162,7 +162,7 @@ public class KeychainModule extends ReactContextBaseJavaModule {
 
                 DecryptionResultHandler decryptionHandler = new DecryptionResultHandler() {
                     @Override
-                    public void onDecrypt(DecryptionResult decryptionResult, String error) {
+                    public void onDecrypt(DecryptionResult decryptionResult, String errorMessage, String errorCode) {
                         if (decryptionResult != null) {
                             WritableMap credentials = Arguments.createMap();
 
@@ -187,7 +187,7 @@ public class KeychainModule extends ReactContextBaseJavaModule {
 
                             promise.resolve(credentials);
                         } else {
-                            promise.reject(E_CRYPTO_FAILED, error);
+                            promise.reject(errorCode != null ? errorCode : E_CRYPTO_FAILED, errorMessage);
                         }
                     }
                 };
