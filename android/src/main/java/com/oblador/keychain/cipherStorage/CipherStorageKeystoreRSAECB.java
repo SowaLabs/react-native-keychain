@@ -1,7 +1,6 @@
 package com.oblador.keychain.cipherStorage;
 
 import android.Manifest;
-import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.KeyguardManager;
 import android.content.Context;
@@ -15,7 +14,6 @@ import android.security.keystore.UserNotAuthenticatedException;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.annotation.RequiresApi;
-import android.support.v4.app.FragmentActivity;
 
 import com.facebook.react.bridge.ReactApplicationContext;
 
@@ -43,6 +41,7 @@ import java.security.cert.CertificateException;
 import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.KeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.util.Map;
 import java.util.concurrent.Executors;
 
 import javax.crypto.Cipher;
@@ -167,7 +166,7 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
     }
 
     @Override
-    public EncryptionResult encrypt(@NonNull String service, @NonNull String username, @NonNull String password) throws CryptoFailedException {
+    public void encrypt(@NonNull final EncryptionResultHandler encryptionResultHandler, @NonNull String service, @NonNull String username, @NonNull String password, Map<String, String> options) throws CryptoFailedException, KeyPermanentlyInvalidatedException {
         service = getDefaultServiceIfEmpty(service);
 
         try {
@@ -185,7 +184,7 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
             byte[] encryptedUsername = encryptString(key, service, username);
             byte[] encryptedPassword = encryptString(key, service, password);
 
-            return new EncryptionResult(encryptedUsername, encryptedPassword, this);
+            encryptionResultHandler.onEncrypt(new EncryptionResult(encryptedUsername, encryptedPassword, this), null);
         } catch (NoSuchAlgorithmException | InvalidAlgorithmParameterException | NoSuchProviderException e) {
             throw new CryptoFailedException("Could not encrypt data for service " + service, e);
         } catch (KeyStoreException | KeyStoreAccessException e) {
@@ -214,7 +213,7 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
     }
 
     @Override
-    public void decrypt(@NonNull DecryptionResultHandler decryptionResultHandler, @NonNull String service, @NonNull byte[] username, @NonNull byte[] password) throws CryptoFailedException, KeyPermanentlyInvalidatedException {
+    public void decrypt(@NonNull DecryptionResultHandler decryptionResultHandler, @NonNull String service, @NonNull byte[] username, @NonNull byte[] password, Map<String, String> options) throws CryptoFailedException, KeyPermanentlyInvalidatedException {
         service = getDefaultServiceIfEmpty(service);
 
         KeyStore keyStore;

@@ -1,21 +1,33 @@
 package com.oblador.keychain.cipherStorage;
 
+import android.Manifest;
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.app.KeyguardManager;
+import android.content.Context;
+import android.content.pm.PackageManager;
 import android.os.Build;
+import android.os.CancellationSignal;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyPermanentlyInvalidatedException;
 import android.security.keystore.KeyProperties;
+import android.security.keystore.UserNotAuthenticatedException;
 import android.support.annotation.NonNull;
 
+import com.facebook.react.bridge.ReactApplicationContext;
+import com.facebook.react.bridge.ReactContext;
+import com.oblador.keychain.KeychainModule;
+import com.oblador.keychain.R;
 import com.oblador.keychain.exceptions.CryptoFailedException;
 import com.oblador.keychain.exceptions.KeyStoreAccessException;
+import com.oblador.keychain.supportBiometric.BiometricPrompt;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.security.InvalidAlgorithmParameterException;
+import java.security.InvalidKeyException;
 import java.security.Key;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -24,6 +36,8 @@ import java.security.NoSuchProviderException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
 import java.security.spec.AlgorithmParameterSpec;
+import java.util.Map;
+import java.util.concurrent.Executors;
 
 import javax.crypto.Cipher;
 import javax.crypto.CipherInputStream;
@@ -31,9 +45,12 @@ import javax.crypto.CipherOutputStream;
 import javax.crypto.KeyGenerator;
 import javax.crypto.spec.IvParameterSpec;
 
+import static com.oblador.keychain.supportBiometric.BiometricPrompt.*;
+
 @TargetApi(Build.VERSION_CODES.M)
 public class
 CipherStorageKeystoreAESCBC implements CipherStorage {
+    public static final String DELIMITER = "]";
     public static final String CIPHER_STORAGE_NAME = "KeystoreAESCBC";
     public static final String DEFAULT_SERVICE = "RN_KEYCHAIN_DEFAULT_ALIAS";
     public static final String KEYSTORE_TYPE = "AndroidKeyStore";
@@ -46,6 +63,57 @@ CipherStorageKeystoreAESCBC implements CipherStorage {
                     ENCRYPTION_PADDING;
     public static final int ENCRYPTION_KEY_SIZE = 256;
 
+    private CancellationSignal mBiometricPromptCancellationSignal;
+    private BiometricPrompt mBiometricPrompt;
+    private KeyguardManager mKeyguardManager;
+    private ReactContext mReactContext;
+    private Activity mActivity;
+
+    public CipherStorageKeystoreAESCBC(ReactApplicationContext reactContext) {
+        mReactContext = reactContext;
+
+        mKeyguardManager = (KeyguardManager) reactContext.getSystemService(Context.KEYGUARD_SERVICE);
+    }
+
+    private boolean canStartFingerprintAuthentication() {
+        return (mKeyguardManager.isKeyguardSecure() &&
+                (mReactContext.checkSelfPermission(Manifest.permission.USE_BIOMETRIC) == PackageManager.PERMISSION_GRANTED
+                        || mReactContext.checkSelfPermission(Manifest.permission.USE_FINGERPRINT) == PackageManager.PERMISSION_GRANTED));
+    }
+
+    private void startFingerprintAuthentication(AuthenticationCallback callback, CryptoObject cryptoObject, Map<String, String> options) throws Exception {
+        // If we have a previous cancellationSignal, cancel it.
+        if (mBiometricPromptCancellationSignal != null) {
+            mBiometricPromptCancellationSignal.cancel();
+        }
+
+        if (mActivity == null) {
+            throw new Exception("mActivity is null (make sure to call setCurrentActivity)");
+        }
+
+        mBiometricPrompt = new BiometricPrompt(mActivity, Executors.newSingleThreadExecutor(), callback);
+        mBiometricPromptCancellationSignal = new CancellationSignal();
+
+        String title = options.get(KeychainModule.PROMPT_TITLE_KEY);
+        if (title == null) title = mActivity.getString(R.string.fingerprint_prompt_title);
+
+        String subtitle = options.get(KeychainModule.PROMPT_SUBTITLE_KEY);
+        if (subtitle == null)  subtitle = mActivity.getString(R.string.fingerprint_prompt_subtitle);
+
+        String cancel = options.get(KeychainModule.PROMPT_CANCEL_KEY);
+        if (cancel == null) cancel = mActivity.getString(R.string.fingerprint_prompt_negative_button);
+
+
+        BiometricPrompt.PromptInfo promptInfo = new BiometricPrompt.PromptInfo.Builder()
+                .setTitle(title)
+                .setSubtitle(subtitle)
+                .setNegativeButtonText(cancel)
+                .build();
+
+        mBiometricPrompt.authenticate(promptInfo, cryptoObject);
+        mReactContext.addLifecycleEventListener(mBiometricPrompt);
+    }
+
     @Override
     public String getCipherStorageName() {
         return CIPHER_STORAGE_NAME;
@@ -53,7 +121,7 @@ CipherStorageKeystoreAESCBC implements CipherStorage {
 
     @Override
     public boolean getCipherBiometrySupported() {
-        return false;
+        return true;
     }
 
     @Override
@@ -62,39 +130,98 @@ CipherStorageKeystoreAESCBC implements CipherStorage {
     }
 
     @Override
-    public EncryptionResult encrypt(@NonNull String service, @NonNull String username, @NonNull String password) throws CryptoFailedException {
-        service = getDefaultServiceIfEmpty(service);
+    public void encrypt(@NonNull final EncryptionResultHandler encryptionResultHandler, @NonNull final String service, @NonNull final String username, @NonNull final String password, Map<String, String> options) throws CryptoFailedException, KeyPermanentlyInvalidatedException {
+        final String resolvedService = getDefaultServiceIfEmpty(service);
+        final String resolvedServiceNoAuthRequired = getNoAuthRequiredService(service);
+
+        final Key key;
+        final Key keyNoAuthRequired;
 
         try {
             KeyStore keyStore = getKeyStoreAndLoad();
 
-            if (!keyStore.containsAlias(service)) {
-                generateKeyAndStoreUnderAlias(service);
+            if (!keyStore.containsAlias(resolvedService)) {
+                generateKeyAndStoreUnderAlias(resolvedService, true);
+            }
+            if (!keyStore.containsAlias(resolvedServiceNoAuthRequired)) {
+                generateKeyAndStoreUnderAlias(resolvedServiceNoAuthRequired, false);
             }
 
-            Key key = keyStore.getKey(service, null);
+            key = keyStore.getKey(resolvedService, null);
+            keyNoAuthRequired = keyStore.getKey(resolvedServiceNoAuthRequired, null);
 
-            byte[] encryptedUsername = encryptString(key, service, username);
-            byte[] encryptedPassword = encryptString(key, service, password);
+            final Cipher cipher = getCipher(key, Cipher.ENCRYPT_MODE, null);
+            final Cipher cipherNoAuthRequired = getCipher(keyNoAuthRequired, Cipher.ENCRYPT_MODE, null);
 
-            return new EncryptionResult(encryptedUsername, encryptedPassword, this);
+            if (!canStartFingerprintAuthentication()) {
+                throw new CryptoFailedException("Could not start fingerprint Authentication");
+            }
+            try {
+                AuthenticationCallback authenticationCallback = new AuthenticationCallback() {
+                    @Override
+                    public void onAuthenticationError(int errorCode, @NonNull CharSequence errString) {
+                        super.onAuthenticationError(errorCode, errString);
+                        encryptionResultHandler.onEncrypt(null, errString.toString(), Integer.toString(errorCode));
+                        mBiometricPromptCancellationSignal.cancel();
+                    }
+
+                    // We don't really want to do anything here
+                    // the error message is handled by the info view.
+                    // And we don't want to throw an error, as the user can still retry.
+                    @Override
+                    public void onAuthenticationFailed() {
+                        super.onAuthenticationFailed();
+                    }
+
+                    @Override
+                    public void onAuthenticationSucceeded(@NonNull AuthenticationResult result) {
+                        super.onAuthenticationSucceeded(result);
+                        try {
+                            byte[] encryptedUsername = encryptString(cipherNoAuthRequired, resolvedServiceNoAuthRequired, username);
+                            byte[] encryptedPassword = encryptString(result.getCryptoObject().getCipher(), resolvedService, password);
+                            encryptionResultHandler.onEncrypt(new EncryptionResult(encryptedUsername, encryptedPassword, CipherStorageKeystoreAESCBC.this), null);
+                        } catch (InvalidKeyException e) {
+                            // treat this the same as KeyPermanentlyInvalidatedException
+                            try {
+                                removeKey(resolvedService);
+                                encryptionResultHandler.onEncrypt(null, e.getMessage());
+                            } catch (Exception error) {
+                                encryptionResultHandler.onEncrypt(null, error.getMessage());
+                            }
+                        } catch (Exception e) {
+                            encryptionResultHandler.onEncrypt(null, e.getMessage());
+                        }
+                    }
+                };
+
+                startFingerprintAuthentication(authenticationCallback, new CryptoObject(cipher), options);
+            } catch (Exception e1) {
+                e1.printStackTrace();
+                throw new CryptoFailedException("Could not start fingerprint Authentication", e1);
+            }
+
         } catch (NoSuchAlgorithmException | InvalidAlgorithmParameterException | NoSuchProviderException | UnrecoverableKeyException e) {
-            throw new CryptoFailedException("Could not encrypt data for service " + service, e);
+            throw new CryptoFailedException("Could not encrypt data for service " + resolvedService, e);
         } catch (KeyStoreException | KeyStoreAccessException e) {
-            throw new CryptoFailedException("Could not access Keystore for service " + service, e);
+            throw new CryptoFailedException("Could not access Keystore for service " + resolvedService, e);
         } catch (Exception e) {
             throw new CryptoFailedException("Unknown error: " + e.getMessage(), e);
         }
     }
 
-    private void generateKeyAndStoreUnderAlias(@NonNull String service) throws NoSuchAlgorithmException, NoSuchProviderException, InvalidAlgorithmParameterException {
+    private void generateKeyAndStoreUnderAlias(@NonNull String service, boolean userAuthenticationRequired) throws NoSuchAlgorithmException, NoSuchProviderException, InvalidAlgorithmParameterException {
+        // Set the alias of the entry in Android KeyStore where the key will appear
+        // and the constrains (purposes) in the constructor of the Builder
         AlgorithmParameterSpec spec = new KeyGenParameterSpec.Builder(
                 service,
                 KeyProperties.PURPOSE_DECRYPT | KeyProperties.PURPOSE_ENCRYPT)
                 .setBlockModes(ENCRYPTION_BLOCK_MODE)
                 .setEncryptionPaddings(ENCRYPTION_PADDING)
-                .setRandomizedEncryptionRequired(true)
-                //.setUserAuthenticationRequired(true) // Will throw InvalidAlgorithmParameterException if there is no fingerprint enrolled on the device
+                // .setRandomizedEncryptionRequired(true)
+                // Require the user to authenticate with a fingerprint to authorize every use
+                // of the key
+                .setUserAuthenticationRequired(userAuthenticationRequired) // Will throw InvalidAlgorithmParameterException if there is no fingerprint enrolled on the device
+                .setUserAuthenticationValidityDurationSeconds(-1)
                 .setKeySize(ENCRYPTION_KEY_SIZE)
                 .build();
 
@@ -105,18 +232,71 @@ CipherStorageKeystoreAESCBC implements CipherStorage {
     }
 
     @Override
-    public void decrypt(@NonNull DecryptionResultHandler decryptionResultHandler, @NonNull String service, @NonNull byte[] username, @NonNull byte[] password) throws CryptoFailedException, KeyPermanentlyInvalidatedException {
-        service = getDefaultServiceIfEmpty(service);
+    public void decrypt(@NonNull final DecryptionResultHandler decryptionResultHandler, @NonNull String service, @NonNull final byte[] username, @NonNull final byte[] password, Map<String, String> options) throws CryptoFailedException, KeyPermanentlyInvalidatedException {
+        final String resolvedService = getDefaultServiceIfEmpty(service);
+        final String resolvedServiceNoAuthRequired = getNoAuthRequiredService(service);
+
+        final Key key;
+        final Key keyNoAuthRequired;
 
         try {
             KeyStore keyStore = getKeyStoreAndLoad();
+            key = keyStore.getKey(resolvedService, null);
+            keyNoAuthRequired = keyStore.getKey(resolvedServiceNoAuthRequired, null);
 
-            Key key = keyStore.getKey(service, null);
+            final ByteArrayInputStream passwordInputStream = new ByteArrayInputStream(password);
+            final Cipher cipher = getCipher(key, Cipher.DECRYPT_MODE, readIvFromStream(passwordInputStream));
 
-            String decryptedUsername = decryptBytes(key, username);
-            String decryptedPassword = decryptBytes(key, password);
+            final ByteArrayInputStream usernameInputStream = new ByteArrayInputStream(username);
+            final Cipher cipherNoAuthRequired = getCipher(keyNoAuthRequired, Cipher.DECRYPT_MODE, readIvFromStream(usernameInputStream));
 
-            decryptionResultHandler.onDecrypt(new DecryptionResult(decryptedUsername, decryptedPassword), null);
+            if (!canStartFingerprintAuthentication()) {
+                throw new CryptoFailedException("Could not start fingerprint Authentication");
+            }
+            try {
+                AuthenticationCallback authenticationCallback = new AuthenticationCallback() {
+                    @Override
+                    public void onAuthenticationError(int errorCode, @NonNull CharSequence errString) {
+                        super.onAuthenticationError(errorCode, errString);
+                        decryptionResultHandler.onDecrypt(null, errString.toString(), Integer.toString(errorCode));
+                        mBiometricPromptCancellationSignal.cancel();
+                    }
+
+                    // We don't really want to do anything here
+                    // the error message is handled by the info view.
+                    // And we don't want to throw an error, as the user can still retry.
+                    @Override
+                    public void onAuthenticationFailed() {
+                        super.onAuthenticationFailed();
+                    }
+
+                    @Override
+                    public void onAuthenticationSucceeded(@NonNull AuthenticationResult result) {
+                        super.onAuthenticationSucceeded(result);
+                        try {
+                            String decryptedUsername = decryptBytes(cipherNoAuthRequired, usernameInputStream);
+                            String decryptedPassword = decryptBytes(cipher, passwordInputStream);
+                            decryptionResultHandler.onDecrypt(new DecryptionResult(decryptedUsername, decryptedPassword), null);
+                        } catch (InvalidKeyException e) {
+                            // treat this the same as KeyPermanentlyInvalidatedException
+                            try {
+                                removeKey(resolvedService);
+                                decryptionResultHandler.onDecrypt(null, e.getMessage());
+                            } catch (Exception error) {
+                                decryptionResultHandler.onDecrypt(null, error.getMessage());
+                            }
+                        } catch (Exception e) {
+                            decryptionResultHandler.onDecrypt(null, e.getMessage());
+                        }
+                    }
+                };
+
+                startFingerprintAuthentication(authenticationCallback, new CryptoObject(cipher), options);
+            } catch (Exception e1) {
+                e1.printStackTrace();
+                throw new CryptoFailedException("Could not start fingerprint Authentication", e1);
+            }
+
         } catch (KeyStoreException | UnrecoverableKeyException | NoSuchAlgorithmException e) {
             throw new CryptoFailedException("Could not get key from Keystore", e);
         } catch (KeyStoreAccessException e) {
@@ -143,10 +323,20 @@ CipherStorageKeystoreAESCBC implements CipherStorage {
         }
     }
 
-    private byte[] encryptString(Key key, String service, String value) throws CryptoFailedException {
+    private Cipher getCipher(Key key, int opmode, IvParameterSpec ivParams) throws CryptoFailedException, UserNotAuthenticatedException, KeyPermanentlyInvalidatedException {
         try {
             Cipher cipher = Cipher.getInstance(ENCRYPTION_TRANSFORMATION);
-            cipher.init(Cipher.ENCRYPT_MODE, key);
+            cipher.init(opmode, key, ivParams);
+            return cipher;
+        } catch (UserNotAuthenticatedException | KeyPermanentlyInvalidatedException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new CryptoFailedException("Could not generate cipher", e);
+        }
+    }
+
+    private byte[] encryptString(Cipher cipher, String service, String value) throws CryptoFailedException, UserNotAuthenticatedException, KeyPermanentlyInvalidatedException {
+        try {
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             // write initialization vector to the beginning of the stream
             byte[] iv = cipher.getIV();
@@ -156,18 +346,13 @@ CipherStorageKeystoreAESCBC implements CipherStorage {
             cipherOutputStream.write(value.getBytes("UTF-8"));
             cipherOutputStream.close();
             return outputStream.toByteArray();
-        } catch (Exception e) {
+        } catch (IOException e) {
             throw new CryptoFailedException("Could not encrypt value for service " + service, e);
         }
     }
 
-    private String decryptBytes(Key key, byte[] bytes) throws CryptoFailedException {
+    private String decryptBytes(Cipher cipher, ByteArrayInputStream inputStream) throws CryptoFailedException, UserNotAuthenticatedException, KeyPermanentlyInvalidatedException {
         try {
-            Cipher cipher = Cipher.getInstance(ENCRYPTION_TRANSFORMATION);
-            ByteArrayInputStream inputStream = new ByteArrayInputStream(bytes);
-            // read the initialization vector from the beginning of the stream
-            IvParameterSpec ivParams = readIvFromStream(inputStream);
-            cipher.init(Cipher.DECRYPT_MODE, key, ivParams);
             // decrypt the bytes using a CipherInputStream
             CipherInputStream cipherInputStream = new CipherInputStream(
                     inputStream, cipher);
@@ -181,7 +366,7 @@ CipherStorageKeystoreAESCBC implements CipherStorage {
                 output.write(buffer, 0, n);
             }
             return new String(output.toByteArray(), Charset.forName("UTF-8"));
-        } catch (Exception e) {
+        } catch (IOException e) {
             throw new CryptoFailedException("Could not decrypt bytes", e);
         }
     }
@@ -207,14 +392,18 @@ CipherStorageKeystoreAESCBC implements CipherStorage {
         return service.isEmpty() ? DEFAULT_SERVICE : service;
     }
 
+    @NonNull
+    private String getNoAuthRequiredService(@NonNull String service) {
+        return getDefaultServiceIfEmpty(service) + "_NO_AUTH_REQUIRED";
+    }
+
     @Override
     public boolean getRequiresCurrentActivity() {
-        // AESCBC does not need the current activity
-        return false;
+        return true;
     }
 
     @Override
     public void setCurrentActivity(Activity activity) {
-        // AESCBC does not need the current activity
+        mActivity = activity;
     }
 }

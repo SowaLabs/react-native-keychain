@@ -7,6 +7,8 @@ import android.support.annotation.NonNull;
 import com.oblador.keychain.exceptions.CryptoFailedException;
 import com.oblador.keychain.exceptions.KeyStoreAccessException;
 
+import java.util.Map;
+
 public interface CipherStorage {
     abstract class CipherResult<T> {
         public final T username;
@@ -27,6 +29,14 @@ public interface CipherStorage {
         }
     }
 
+    abstract class EncryptionResultHandler {
+        abstract public void onEncrypt(EncryptionResult encryptionResult, String errorMessage, String errorCode);
+
+        public void onEncrypt(EncryptionResult encryptionResult, String errorMessage) {
+            onEncrypt(encryptionResult, errorMessage, null);
+        }
+    }
+
     class DecryptionResult extends CipherResult<String> {
         public DecryptionResult(String username, String password) {
             super(username, password);
@@ -41,9 +51,9 @@ public interface CipherStorage {
         }
     }
 
-    EncryptionResult encrypt(@NonNull String service, @NonNull String username, @NonNull String password) throws CryptoFailedException;
+    void encrypt(@NonNull EncryptionResultHandler encryptionResultHandler, @NonNull String service, @NonNull String username, @NonNull String password, Map<String, String> options) throws CryptoFailedException, KeyPermanentlyInvalidatedException;
 
-    void decrypt(@NonNull DecryptionResultHandler decryptionResultHandler, @NonNull String service, @NonNull byte[] username, @NonNull byte[] password) throws CryptoFailedException, KeyPermanentlyInvalidatedException;
+    void decrypt(@NonNull DecryptionResultHandler decryptionResultHandler, @NonNull String service, @NonNull byte[] username, @NonNull byte[] password, Map<String, String> options) throws CryptoFailedException, KeyPermanentlyInvalidatedException;
 
     void removeKey(@NonNull String service) throws KeyStoreAccessException;
 

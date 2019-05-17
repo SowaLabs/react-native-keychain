@@ -15,8 +15,7 @@ import com.facebook.react.bridge.ReactApplicationContext;
 import com.oblador.keychain.exceptions.CryptoFailedException;
 
 import java.nio.charset.Charset;
-
-import static android.R.attr.password;
+import java.util.Map;
 
 public class CipherStorageFacebookConceal implements CipherStorage {
     public static final String CIPHER_STORAGE_NAME = "FacebookConceal";
@@ -45,7 +44,7 @@ public class CipherStorageFacebookConceal implements CipherStorage {
 
 
     @Override
-    public EncryptionResult encrypt(@NonNull String service, @NonNull String username, @NonNull String password) throws CryptoFailedException {
+    public void encrypt(@NonNull final EncryptionResultHandler encryptionResultHandler, @NonNull String service, @NonNull String username, @NonNull String password, Map<String, String> options) throws CryptoFailedException, KeyPermanentlyInvalidatedException {
         if (!crypto.isAvailable()) {
             throw new CryptoFailedException("Crypto is missing");
         }
@@ -56,14 +55,14 @@ public class CipherStorageFacebookConceal implements CipherStorage {
             byte[] encryptedUsername = crypto.encrypt(username.getBytes(Charset.forName("UTF-8")), usernameEntity);
             byte[] encryptedPassword = crypto.encrypt(password.getBytes(Charset.forName("UTF-8")), passwordEntity);
 
-            return new EncryptionResult(encryptedUsername, encryptedPassword, this);
+            encryptionResultHandler.onEncrypt(new EncryptionResult(encryptedUsername, encryptedPassword, this), null);
         } catch (Exception e) {
             throw new CryptoFailedException("Encryption failed for service " + service, e);
         }
     }
 
     @Override
-    public void decrypt(@NonNull DecryptionResultHandler decryptionResultHandler, @NonNull String service, @NonNull byte[] username, @NonNull byte[] password) throws CryptoFailedException, KeyPermanentlyInvalidatedException {
+    public void decrypt(@NonNull DecryptionResultHandler decryptionResultHandler, @NonNull String service, @NonNull byte[] username, @NonNull byte[] password, Map<String, String> options) throws CryptoFailedException, KeyPermanentlyInvalidatedException {
         if (!crypto.isAvailable()) {
             throw new CryptoFailedException("Crypto is missing");
         }
