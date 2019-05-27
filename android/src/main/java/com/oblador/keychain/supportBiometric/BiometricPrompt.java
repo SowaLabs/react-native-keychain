@@ -63,13 +63,17 @@ public class BiometricPrompt implements BiometricConstants, LifecycleEventListen
     static final String KEY_DESCRIPTION = "description";
     static final String KEY_NEGATIVE_TEXT = "negative_text";
 
+    static private boolean shouldUseSystemAuthPrompt = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
+            // workaround for https://issuetracker.google.com/issues/123997468 and https://issuetracker.google.com/issues/129937212
+            !Build.MANUFACTURER.equalsIgnoreCase("SAMSUNG");
+
     /**
      * Observe the client's lifecycle. Keep authenticating across configuration changes, but
      * dismiss the prompt if the client goes into the background.
      */
     @Override
     public void onHostResume() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        if (shouldUseSystemAuthPrompt) {
             mBiometricFragment = (BiometricFragment) mActivity
                     .getFragmentManager().findFragmentByTag(BIOMETRIC_FRAGMENT_TAG);
             if (DEBUG) Log.v(TAG, "BiometricFragment: " + mBiometricFragment);
@@ -97,7 +101,7 @@ public class BiometricPrompt implements BiometricConstants, LifecycleEventListen
     @Override
     public void onHostPause() {
         if (!mActivity.isChangingConfigurations()) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            if (shouldUseSystemAuthPrompt) {
                 if (mBiometricFragment != null) {
                     mBiometricFragment.cancel();
                 }
@@ -380,7 +384,7 @@ public class BiometricPrompt implements BiometricConstants, LifecycleEventListen
                     mExecutor.execute(new Runnable() {
                         @Override
                         public void run() {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            if (shouldUseSystemAuthPrompt) {
                                 CharSequence errorText =
                                         mBiometricFragment.getNegativeButtonText();
                                 mAuthenticationCallback.onAuthenticationError(
@@ -476,7 +480,7 @@ public class BiometricPrompt implements BiometricConstants, LifecycleEventListen
         final Bundle bundle = info.getBundle();
         final FragmentManager fragmentManager = mActivity.getFragmentManager();
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        if (shouldUseSystemAuthPrompt) {
             BiometricFragment biometricFragment = (BiometricFragment) fragmentManager.findFragmentByTag(
                     BIOMETRIC_FRAGMENT_TAG);
             if (biometricFragment != null) {
@@ -554,7 +558,7 @@ public class BiometricPrompt implements BiometricConstants, LifecycleEventListen
      * biometric service.
      */
     public void cancelAuthentication() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        if (shouldUseSystemAuthPrompt) {
             if (mBiometricFragment != null) {
                 mBiometricFragment.cancel();
             }
