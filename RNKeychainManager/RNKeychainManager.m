@@ -20,6 +20,28 @@
 @synthesize bridge = _bridge;
 RCT_EXPORT_MODULE();
 
++ (BOOL)requiresMainQueueSetup {
+    return NO;  // module initialization does not rely on calling UIKit
+}
+
+- (NSDictionary *)constantsToExport {
+    return @{ @"errSecUnimplemented": [NSString stringWithFormat:@"%i", errSecUnimplemented],
+              @"errSecIO": [NSString stringWithFormat:@"%i", errSecIO],
+              @"errSecOpWr": [NSString stringWithFormat:@"%i", errSecOpWr],
+              @"errSecParam": [NSString stringWithFormat:@"%i", errSecParam],
+              @"errSecAllocate": [NSString stringWithFormat:@"%i", errSecAllocate],
+              @"errSecUserCanceled": [NSString stringWithFormat:@"%i", errSecUserCanceled],
+              @"errSecBadReq": [NSString stringWithFormat:@"%i", errSecBadReq],
+              @"errSecNotAvailable": [NSString stringWithFormat:@"%i", errSecNotAvailable],
+              @"errSecDuplicateItem": [NSString stringWithFormat:@"%i", errSecDuplicateItem],
+              @"errSecItemNotFound": [NSString stringWithFormat:@"%i", errSecItemNotFound],
+              @"errSecInteractionNotAllowed": [NSString stringWithFormat:@"%i", errSecInteractionNotAllowed],
+              @"errSecDecode": [NSString stringWithFormat:@"%i", errSecDecode],
+              @"errSecAuthFailed": [NSString stringWithFormat:@"%i", errSecAuthFailed],
+              @"errSecMissingEntitlement": [NSString stringWithFormat:@"%i", errSecMissingEntitlement],
+              };
+}
+
 // Messages from the comments in <Security/SecBase.h>
 NSString *messageForError(NSError *error)
 {

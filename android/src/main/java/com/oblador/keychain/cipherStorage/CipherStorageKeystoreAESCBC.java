@@ -146,66 +146,66 @@ CipherStorageKeystoreAESCBC implements CipherStorage {
             if (!keyStore.containsAlias(resolvedServiceNoAuthRequired)) {
                 generateKeyAndStoreUnderAlias(resolvedServiceNoAuthRequired, false);
             }
-
             key = keyStore.getKey(resolvedService, null);
             keyNoAuthRequired = keyStore.getKey(resolvedServiceNoAuthRequired, null);
 
-            final Cipher cipher = getCipher(key, Cipher.ENCRYPT_MODE, null);
-            final Cipher cipherNoAuthRequired = getCipher(keyNoAuthRequired, Cipher.ENCRYPT_MODE, null);
-
-            if (!canStartFingerprintAuthentication()) {
-                throw new CryptoFailedException("Could not start fingerprint Authentication");
-            }
-            try {
-                AuthenticationCallback authenticationCallback = new AuthenticationCallback() {
-                    @Override
-                    public void onAuthenticationError(int errorCode, @NonNull CharSequence errString) {
-                        super.onAuthenticationError(errorCode, errString);
-                        encryptionResultHandler.onEncrypt(null, errString.toString(), Integer.toString(errorCode));
-                        mBiometricPromptCancellationSignal.cancel();
-                    }
-
-                    // We don't really want to do anything here
-                    // the error message is handled by the info view.
-                    // And we don't want to throw an error, as the user can still retry.
-                    @Override
-                    public void onAuthenticationFailed() {
-                        super.onAuthenticationFailed();
-                    }
-
-                    @Override
-                    public void onAuthenticationSucceeded(@NonNull AuthenticationResult result) {
-                        super.onAuthenticationSucceeded(result);
-                        try {
-                            byte[] encryptedUsername = encryptString(cipherNoAuthRequired, resolvedServiceNoAuthRequired, username);
-                            byte[] encryptedPassword = encryptString(result.getCryptoObject().getCipher(), resolvedService, password);
-                            encryptionResultHandler.onEncrypt(new EncryptionResult(encryptedUsername, encryptedPassword, CipherStorageKeystoreAESCBC.this), null);
-                        } catch (InvalidKeyException e) {
-                            // treat this the same as KeyPermanentlyInvalidatedException
-                            try {
-                                removeKey(resolvedService);
-                                encryptionResultHandler.onEncrypt(null, e.getMessage());
-                            } catch (Exception error) {
-                                encryptionResultHandler.onEncrypt(null, error.getMessage());
-                            }
-                        } catch (Exception e) {
-                            encryptionResultHandler.onEncrypt(null, e.getMessage());
-                        }
-                    }
-                };
-
-                startFingerprintAuthentication(authenticationCallback, new CryptoObject(cipher), options);
-            } catch (Exception e1) {
-                e1.printStackTrace();
-                throw new CryptoFailedException("Could not start fingerprint Authentication", e1);
-            }
-
-        } catch (NoSuchAlgorithmException | InvalidAlgorithmParameterException | NoSuchProviderException | UnrecoverableKeyException e) {
+        } catch (NoSuchAlgorithmException | InvalidAlgorithmParameterException | NoSuchProviderException e) {
             throw new CryptoFailedException("Could not encrypt data for service " + resolvedService, e);
         } catch (KeyStoreException | KeyStoreAccessException e) {
             throw new CryptoFailedException("Could not access Keystore for service " + resolvedService, e);
         } catch (Exception e) {
             throw new CryptoFailedException("Unknown error: " + e.getMessage(), e);
+        }
+
+        final Cipher cipher;
+        final Cipher cipherNoAuthRequired;
+
+        try {
+            cipher = getCipher(key, Cipher.ENCRYPT_MODE, null);
+            cipherNoAuthRequired = getCipher(keyNoAuthRequired, Cipher.ENCRYPT_MODE, null);
+        } catch (KeyPermanentlyInvalidatedException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new CryptoFailedException("Unknown error: " + e.getMessage(), e);
+        }
+
+        if (!canStartFingerprintAuthentication()) {
+            throw new CryptoFailedException("Could not start fingerprint Authentication");
+        }
+        try {
+            AuthenticationCallback authenticationCallback = new AuthenticationCallback() {
+                @Override
+                public void onAuthenticationError(int errorCode, @NonNull CharSequence errString) {
+                    super.onAuthenticationError(errorCode, errString);
+                    encryptionResultHandler.onEncrypt(null, errString.toString(), Integer.toString(errorCode));
+                    mBiometricPromptCancellationSignal.cancel();
+                }
+
+                // We don't really want to do anything here
+                // the error message is handled by the info view.
+                // And we don't want to throw an error, as the user can still retry.
+                @Override
+                public void onAuthenticationFailed() {
+                    super.onAuthenticationFailed();
+                }
+
+                @Override
+                public void onAuthenticationSucceeded(@NonNull AuthenticationResult result) {
+                    super.onAuthenticationSucceeded(result);
+                    try {
+                        byte[] encryptedUsername = encryptString(cipherNoAuthRequired, resolvedServiceNoAuthRequired, username);
+                        byte[] encryptedPassword = encryptString(result.getCryptoObject().getCipher(), resolvedService, password);
+                        encryptionResultHandler.onEncrypt(new EncryptionResult(encryptedUsername, encryptedPassword, CipherStorageKeystoreAESCBC.this), null);
+                    } catch (Exception e) {
+                        encryptionResultHandler.onEncrypt(null, e.getMessage());
+                    }
+                }
+            };
+
+            startFingerprintAuthentication(authenticationCallback, new CryptoObject(cipher), options);
+        } catch (Exception e1) {
+            e1.printStackTrace();
+            throw new CryptoFailedException("Could not start fingerprint Authentication", e1);
         }
     }
 
@@ -236,66 +236,15 @@ CipherStorageKeystoreAESCBC implements CipherStorage {
         final String resolvedService = getDefaultServiceIfEmpty(service);
         final String resolvedServiceNoAuthRequired = getNoAuthRequiredService(service);
 
+        // init key
         final Key key;
         final Key keyNoAuthRequired;
 
         try {
             KeyStore keyStore = getKeyStoreAndLoad();
+
             key = keyStore.getKey(resolvedService, null);
             keyNoAuthRequired = keyStore.getKey(resolvedServiceNoAuthRequired, null);
-
-            final ByteArrayInputStream passwordInputStream = new ByteArrayInputStream(password);
-            final Cipher cipher = getCipher(key, Cipher.DECRYPT_MODE, readIvFromStream(passwordInputStream));
-
-            final ByteArrayInputStream usernameInputStream = new ByteArrayInputStream(username);
-            final Cipher cipherNoAuthRequired = getCipher(keyNoAuthRequired, Cipher.DECRYPT_MODE, readIvFromStream(usernameInputStream));
-
-            if (!canStartFingerprintAuthentication()) {
-                throw new CryptoFailedException("Could not start fingerprint Authentication");
-            }
-            try {
-                AuthenticationCallback authenticationCallback = new AuthenticationCallback() {
-                    @Override
-                    public void onAuthenticationError(int errorCode, @NonNull CharSequence errString) {
-                        super.onAuthenticationError(errorCode, errString);
-                        decryptionResultHandler.onDecrypt(null, errString.toString(), Integer.toString(errorCode));
-                        mBiometricPromptCancellationSignal.cancel();
-                    }
-
-                    // We don't really want to do anything here
-                    // the error message is handled by the info view.
-                    // And we don't want to throw an error, as the user can still retry.
-                    @Override
-                    public void onAuthenticationFailed() {
-                        super.onAuthenticationFailed();
-                    }
-
-                    @Override
-                    public void onAuthenticationSucceeded(@NonNull AuthenticationResult result) {
-                        super.onAuthenticationSucceeded(result);
-                        try {
-                            String decryptedUsername = decryptBytes(cipherNoAuthRequired, usernameInputStream);
-                            String decryptedPassword = decryptBytes(cipher, passwordInputStream);
-                            decryptionResultHandler.onDecrypt(new DecryptionResult(decryptedUsername, decryptedPassword), null);
-                        } catch (InvalidKeyException e) {
-                            // treat this the same as KeyPermanentlyInvalidatedException
-                            try {
-                                removeKey(resolvedService);
-                                decryptionResultHandler.onDecrypt(null, e.getMessage());
-                            } catch (Exception error) {
-                                decryptionResultHandler.onDecrypt(null, error.getMessage());
-                            }
-                        } catch (Exception e) {
-                            decryptionResultHandler.onDecrypt(null, e.getMessage());
-                        }
-                    }
-                };
-
-                startFingerprintAuthentication(authenticationCallback, new CryptoObject(cipher), options);
-            } catch (Exception e1) {
-                e1.printStackTrace();
-                throw new CryptoFailedException("Could not start fingerprint Authentication", e1);
-            }
 
         } catch (KeyStoreException | UnrecoverableKeyException | NoSuchAlgorithmException e) {
             throw new CryptoFailedException("Could not get key from Keystore", e);
@@ -303,6 +252,63 @@ CipherStorageKeystoreAESCBC implements CipherStorage {
             throw new CryptoFailedException("Could not access Keystore", e);
         } catch (Exception e) {
             throw new CryptoFailedException("Unknown error: " + e.getMessage(), e);
+        }
+
+        // init cipher
+        final ByteArrayInputStream passwordInputStream;
+        final ByteArrayInputStream usernameInputStream;
+        final Cipher cipher;
+        final Cipher cipherNoAuthRequired;
+
+        try {
+            passwordInputStream = new ByteArrayInputStream(password);
+            cipher = getCipher(key, Cipher.DECRYPT_MODE, readIvFromStream(passwordInputStream));
+
+            usernameInputStream = new ByteArrayInputStream(username);
+            cipherNoAuthRequired = getCipher(keyNoAuthRequired, Cipher.DECRYPT_MODE, readIvFromStream(usernameInputStream));
+        } catch (KeyPermanentlyInvalidatedException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new CryptoFailedException("Unknown error: " + e.getMessage(), e);
+        }
+
+        if (!canStartFingerprintAuthentication()) {
+            throw new CryptoFailedException("Could not start fingerprint Authentication");
+        }
+        try {
+            AuthenticationCallback authenticationCallback = new AuthenticationCallback() {
+                @Override
+                public void onAuthenticationError(int errorCode, @NonNull CharSequence errString) {
+                    super.onAuthenticationError(errorCode, errString);
+                    decryptionResultHandler.onDecrypt(null, errString.toString(), Integer.toString(errorCode));
+                    mBiometricPromptCancellationSignal.cancel();
+                }
+
+                // We don't really want to do anything here
+                // the error message is handled by the info view.
+                // And we don't want to throw an error, as the user can still retry.
+                @Override
+                public void onAuthenticationFailed() {
+                    super.onAuthenticationFailed();
+                }
+
+                @Override
+                public void onAuthenticationSucceeded(@NonNull AuthenticationResult result) {
+                    super.onAuthenticationSucceeded(result);
+                    try {
+                        String decryptedUsername = decryptBytes(cipherNoAuthRequired, usernameInputStream);
+                        String decryptedPassword = decryptBytes(cipher, passwordInputStream);
+                        decryptionResultHandler.onDecrypt(new DecryptionResult(decryptedUsername, decryptedPassword), null);
+                    } catch (Exception e) {
+                        decryptionResultHandler.onDecrypt(null, e.getMessage());
+                    }
+                }
+            };
+
+            startFingerprintAuthentication(authenticationCallback, new CryptoObject(cipher), options);
+        } catch (Exception e1) {
+            e1.printStackTrace();
+            throw new CryptoFailedException("Could not start biometric Authentication", e1);
         }
     }
 
@@ -335,7 +341,7 @@ CipherStorageKeystoreAESCBC implements CipherStorage {
         }
     }
 
-    private byte[] encryptString(Cipher cipher, String service, String value) throws CryptoFailedException, UserNotAuthenticatedException, KeyPermanentlyInvalidatedException {
+    private byte[] encryptString(Cipher cipher, String service, String value) throws CryptoFailedException {
         try {
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             // write initialization vector to the beginning of the stream
@@ -351,7 +357,7 @@ CipherStorageKeystoreAESCBC implements CipherStorage {
         }
     }
 
-    private String decryptBytes(Cipher cipher, ByteArrayInputStream inputStream) throws CryptoFailedException, UserNotAuthenticatedException, KeyPermanentlyInvalidatedException {
+    private String decryptBytes(Cipher cipher, ByteArrayInputStream inputStream) throws CryptoFailedException {
         try {
             // decrypt the bytes using a CipherInputStream
             CipherInputStream cipherInputStream = new CipherInputStream(

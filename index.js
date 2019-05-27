@@ -1,6 +1,35 @@
 import { NativeModules, Platform } from 'react-native';
 const { RNKeychainManager } = NativeModules;
 
+// iOS
+export const ERR_SEC_UNIMPLEMENTED = RNKeychainManager.errSecUnimplemented;
+export const ERR_SEC_IO = RNKeychainManager.errSecIO;
+export const ERR_SEC_OP_WR = RNKeychainManager.errSecOpWr;
+export const ERR_SEC_PARAM = RNKeychainManager.errSecParam;
+export const ERR_SEC_ALLOCATE = RNKeychainManager.errSecAllocate;
+export const ERR_SEC_USER_CANCELED = RNKeychainManager.errSecUserCanceled;
+export const ERR_SEC_BAD_REQ = RNKeychainManager.errSecBadReq;
+export const ERR_SEC_NOT_AVAILABLE = RNKeychainManager.errSecNotAvailable;
+export const ERR_SEC_DUPLICATE_ITEM = RNKeychainManager.errSecDuplicateItem;
+export const ERR_SEC_ITEM_NOT_FOUND = RNKeychainManager.errSecItemNotFound;
+export const ERR_SEC_INTERACTION_NOT_ALLOWED = RNKeychainManager.errSecInteractionNotAllowed;
+export const ERR_SEC_DECODE = RNKeychainManager.errSecDecode;
+export const ERR_SEC_AUTH_FAILED = RNKeychainManager.errSecAuthFailed;
+export const ERR_SEC_MISSING_ENTITLEMEN = RNKeychainManager.errSecMissingEntitlemen;
+// Android
+export const BIOMETRIC_ERROR_HW_UNAVAILABLE = RNKeychainManager.BIOMETRIC_ERROR_HW_UNAVAILABLE;
+export const BIOMETRIC_ERROR_UNABLE_TO_PROCESS = RNKeychainManager.BIOMETRIC_ERROR_UNABLE_TO_PROCESS;
+export const BIOMETRIC_ERROR_TIMEOUT = RNKeychainManager.BIOMETRIC_ERROR_TIMEOUT;
+export const BIOMETRIC_ERROR_NO_SPACE = RNKeychainManager.BIOMETRIC_ERROR_NO_SPACE;
+export const BIOMETRIC_ERROR_CANCELED = RNKeychainManager.BIOMETRIC_ERROR_CANCELED;
+export const BIOMETRIC_ERROR_LOCKOUT = RNKeychainManager.BIOMETRIC_ERROR_LOCKOUT;
+export const BIOMETRIC_ERROR_VENDOR = RNKeychainManager.BIOMETRIC_ERROR_VENDOR;
+export const BIOMETRIC_ERROR_LOCKOUT_PERMANENT = RNKeychainManager.BIOMETRIC_ERROR_LOCKOUT_PERMANENT;
+export const BIOMETRIC_ERROR_USER_CANCELED = RNKeychainManager.BIOMETRIC_ERROR_USER_CANCELED;
+export const BIOMETRIC_ERROR_NO_BIOMETRICS = RNKeychainManager.BIOMETRIC_ERROR_NO_BIOMETRICS;
+export const BIOMETRIC_ERROR_HW_NOT_PRESENT = RNKeychainManager.BIOMETRIC_ERROR_HW_NOT_PRESENT;
+export const BIOMETRIC_ERROR_NEGATIVE_BUTTON = RNKeychainManager.BIOMETRIC_ERROR_NEGATIVE_BUTTON;
+
 export const ACCESSIBLE = {
   WHEN_UNLOCKED: 'AccessibleWhenUnlocked',
   AFTER_FIRST_UNLOCK: 'AccessibleAfterFirstUnlock',

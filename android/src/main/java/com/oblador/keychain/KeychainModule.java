@@ -24,6 +24,7 @@ import com.oblador.keychain.cipherStorage.CipherStorageKeystoreRSAECB;
 import com.oblador.keychain.exceptions.CryptoFailedException;
 import com.oblador.keychain.exceptions.EmptyParameterException;
 import com.oblador.keychain.exceptions.KeyStoreAccessException;
+import com.oblador.keychain.supportBiometric.BiometricPrompt;
 
 import java.security.InvalidKeyException;
 import java.util.Arrays;
@@ -62,6 +63,28 @@ public class KeychainModule extends ReactContextBaseJavaModule {
         return KEYCHAIN_MODULE;
     }
 
+    @Override
+    public Map<String, Object> getConstants() {
+        final Map<String, Object> constants = new HashMap<>();
+        constants.put("E_EMPTY_PARAMETERS", E_EMPTY_PARAMETERS);
+        constants.put("E_CRYPTO_FAILED", E_CRYPTO_FAILED);
+        constants.put("E_KEYSTORE_ACCESS_ERROR", E_KEYSTORE_ACCESS_ERROR);
+        constants.put("E_SUPPORTED_BIOMETRY_ERROR", E_SUPPORTED_BIOMETRY_ERROR);
+        constants.put("BIOMETRIC_ERROR_HW_UNAVAILABLE", String.valueOf(BiometricPrompt.ERROR_HW_UNAVAILABLE));
+        constants.put("BIOMETRIC_ERROR_UNABLE_TO_PROCESS", String.valueOf(BiometricPrompt.ERROR_UNABLE_TO_PROCESS));
+        constants.put("BIOMETRIC_ERROR_TIMEOUT", String.valueOf(BiometricPrompt.ERROR_TIMEOUT));
+        constants.put("BIOMETRIC_ERROR_NO_SPACE", String.valueOf(BiometricPrompt.ERROR_NO_SPACE));
+        constants.put("BIOMETRIC_ERROR_CANCELED", String.valueOf(BiometricPrompt.ERROR_CANCELED));
+        constants.put("BIOMETRIC_ERROR_LOCKOUT", String.valueOf(BiometricPrompt.ERROR_LOCKOUT));
+        constants.put("BIOMETRIC_ERROR_VENDOR ",String.valueOf( BiometricPrompt.ERROR_VENDOR));
+        constants.put("BIOMETRIC_ERROR_LOCKOUT_PERMANENT", String.valueOf(BiometricPrompt.ERROR_LOCKOUT_PERMANENT));
+        constants.put("BIOMETRIC_ERROR_USER_CANCELED", String.valueOf(BiometricPrompt.ERROR_USER_CANCELED));
+        constants.put("BIOMETRIC_ERROR_NO_BIOMETRICS", String.valueOf(BiometricPrompt.ERROR_NO_BIOMETRICS));
+        constants.put("BIOMETRIC_ERROR_HW_NOT_PRESENT", String.valueOf(BiometricPrompt.ERROR_HW_NOT_PRESENT));
+        constants.put("BIOMETRIC_ERROR_NEGATIVE_BUTTON", String.valueOf(BiometricPrompt.ERROR_NEGATIVE_BUTTON));
+        return constants;
+    }
+
     public KeychainModule(ReactApplicationContext reactContext) {
         super(reactContext);
         prefsStorage = new PrefsStorage(reactContext);
@@ -96,6 +119,7 @@ public class KeychainModule extends ReactContextBaseJavaModule {
     @ReactMethod
     public void setGenericPasswordForOptions(final String service, final String username, final String password, final ReadableMap options, final Promise promise) {
         final String resolvedService = getDefaultServiceIfNull(service);
+        CipherStorage currentCipherStorage = null;
         try {
             if (username == null || username.isEmpty() || password == null || password.isEmpty()) {
                 throw new EmptyParameterException("you passed empty or null username/password");
@@ -106,7 +130,7 @@ public class KeychainModule extends ReactContextBaseJavaModule {
             ));
             String accessControl = parsedOptions.get(ACCESS_CONTROL_KEY);
 
-            CipherStorage currentCipherStorage = getCipherStorageForCurrentAPILevel(getUseBiometry(accessControl));
+            currentCipherStorage = getCipherStorageForCurrentAPILevel(getUseBiometry(accessControl));
 
             EncryptionResultHandler encryptionHandler = new EncryptionResultHandler() {
                 @Override
@@ -123,12 +147,17 @@ public class KeychainModule extends ReactContextBaseJavaModule {
         } catch (EmptyParameterException e) {
             Log.e(KEYCHAIN_MODULE, e.getMessage());
             promise.reject(E_EMPTY_PARAMETERS, e);
+        } catch (InvalidKeyException e) {
+            Log.e(KEYCHAIN_MODULE, String.format("Key for service %s permanently invalidated", resolvedService));
+            try {
+                currentCipherStorage.removeKey(resolvedService);
+            } catch (Exception error) {
+                Log.e(KEYCHAIN_MODULE, "Failed removing invalidated key: " + error.getMessage());
+            }
+            promise.resolve(false);
         } catch (CryptoFailedException e) {
             Log.e(KEYCHAIN_MODULE, e.getMessage());
             promise.reject(E_CRYPTO_FAILED, e);
-        } catch (InvalidKeyException e) {
-            Log.e(KEYCHAIN_MODULE, String.format("Key for service %s permanently invalidated", resolvedService));
-            promise.resolve(false);
         }
     }
 
@@ -236,14 +265,14 @@ public class KeychainModule extends ReactContextBaseJavaModule {
                 // decrypt using the older cipher storage
                 oldCipherStorage.decrypt(decryptionHandler, resolvedService, resultSet.usernameBytes, resultSet.passwordBytes, parsedOptions);
             }
-          } catch (InvalidKeyException e) {
-              Log.e(KEYCHAIN_MODULE, String.format("Key for service %s permanently invalidated", resolvedService));
-               try {
-                   cipherStorage.removeKey(resolvedService);
-              } catch (Exception error) {
-                  Log.e(KEYCHAIN_MODULE, "Failed removing invalidated key: " + error.getMessage());
-              }
-              promise.resolve(false);
+        } catch (InvalidKeyException e) {
+            Log.e(KEYCHAIN_MODULE, String.format("Key for service %s permanently invalidated", resolvedService));
+            try {
+                cipherStorage.removeKey(resolvedService);
+            } catch (Exception error) {
+                Log.e(KEYCHAIN_MODULE, "Failed removing invalidated key: " + error.getMessage());
+            }
+            promise.resolve(false);
         } catch (CryptoFailedException e) {
             Log.e(KEYCHAIN_MODULE, e.getMessage());
             promise.reject(E_CRYPTO_FAILED, e);
@@ -327,8 +356,8 @@ public class KeychainModule extends ReactContextBaseJavaModule {
 
     private boolean getUseBiometry(String accessControl) {
         return accessControl != null
-            && (accessControl.equals(ACCESS_CONTROL_BIOMETRY_ANY)
-            || accessControl.equals(ACCESS_CONTROL_BIOMETRY_CURRENT_SET));
+                && (accessControl.equals(ACCESS_CONTROL_BIOMETRY_ANY)
+                || accessControl.equals(ACCESS_CONTROL_BIOMETRY_CURRENT_SET));
     }
 
     // The "Current" CipherStorage is the cipherStorage with the highest API level that is lower than or equal to the current API level
