@@ -1,5 +1,6 @@
 package com.oblador.keychain;
 
+import android.os.AsyncTask;
 import android.os.Build;
 import android.support.annotation.NonNull;
 import android.util.Log;
@@ -118,47 +119,53 @@ public class KeychainModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void setGenericPasswordForOptions(final String service, final String username, final String password, final ReadableMap options, final Promise promise) {
-        final String resolvedService = getDefaultServiceIfNull(service);
-        CipherStorage currentCipherStorage = null;
-        try {
-            if (username == null || username.isEmpty() || password == null || password.isEmpty()) {
-                throw new EmptyParameterException("you passed empty or null username/password");
-            }
-
-            Map<String, String> parsedOptions = parseOptions(options, Arrays.asList(
-                    ACCESS_CONTROL_KEY, PROMPT_TITLE_KEY, PROMPT_SUBTITLE_KEY, PROMPT_CANCEL_KEY
-            ));
-            String accessControl = parsedOptions.get(ACCESS_CONTROL_KEY);
-
-            currentCipherStorage = getCipherStorageForCurrentAPILevel(getUseBiometry(accessControl));
-
-            EncryptionResultHandler encryptionHandler = new EncryptionResultHandler() {
-                @Override
-                public void onEncrypt(EncryptionResult encryptionResult, String errorMessage, String errorCode) {
-                    if (encryptionResult != null) {
-                        prefsStorage.storeEncryptedEntry(resolvedService, encryptionResult);
-                        promise.resolve(true);
-                    } else {
-                        promise.reject(errorCode != null ? errorCode : E_CRYPTO_FAILED, errorMessage);
+        // currentCipherStorage.encrypt() takes a couple of seconds to complete, run on a background thread so not to block the UI
+        AsyncTask.execute(new Runnable() {
+            @Override
+            public void run() {
+                final String resolvedService = getDefaultServiceIfNull(service);
+                CipherStorage currentCipherStorage = null;
+                try {
+                    if (username == null || username.isEmpty() || password == null || password.isEmpty()) {
+                        throw new EmptyParameterException("you passed empty or null username/password");
                     }
+
+                    Map<String, String> parsedOptions = parseOptions(options, Arrays.asList(
+                            ACCESS_CONTROL_KEY, PROMPT_TITLE_KEY, PROMPT_SUBTITLE_KEY, PROMPT_CANCEL_KEY
+                    ));
+                    String accessControl = parsedOptions.get(ACCESS_CONTROL_KEY);
+
+                    currentCipherStorage = getCipherStorageForCurrentAPILevel(getUseBiometry(accessControl));
+
+                    EncryptionResultHandler encryptionHandler = new EncryptionResultHandler() {
+                        @Override
+                        public void onEncrypt(EncryptionResult encryptionResult, String errorMessage, String errorCode) {
+                            if (encryptionResult != null) {
+                                prefsStorage.storeEncryptedEntry(resolvedService, encryptionResult);
+                                promise.resolve(true);
+                            } else {
+                                promise.reject(errorCode != null ? errorCode : E_CRYPTO_FAILED, errorMessage);
+                            }
+                        }
+                    };
+                    currentCipherStorage.encrypt(encryptionHandler, resolvedService, username, password, parsedOptions);
+                } catch (EmptyParameterException e) {
+                    Log.e(KEYCHAIN_MODULE, e.getMessage());
+                    promise.reject(E_EMPTY_PARAMETERS, e);
+                } catch (InvalidKeyException e) {
+                    Log.e(KEYCHAIN_MODULE, String.format("Key for service %s permanently invalidated", resolvedService));
+                    try {
+                        currentCipherStorage.removeKey(resolvedService);
+                    } catch (Exception error) {
+                        Log.e(KEYCHAIN_MODULE, "Failed removing invalidated key: " + error.getMessage());
+                    }
+                    promise.resolve(false);
+                } catch (CryptoFailedException e) {
+                    Log.e(KEYCHAIN_MODULE, e.getMessage());
+                    promise.reject(E_CRYPTO_FAILED, e);
                 }
-            };
-            currentCipherStorage.encrypt(encryptionHandler, resolvedService, username, password, parsedOptions);
-        } catch (EmptyParameterException e) {
-            Log.e(KEYCHAIN_MODULE, e.getMessage());
-            promise.reject(E_EMPTY_PARAMETERS, e);
-        } catch (InvalidKeyException e) {
-            Log.e(KEYCHAIN_MODULE, String.format("Key for service %s permanently invalidated", resolvedService));
-            try {
-                currentCipherStorage.removeKey(resolvedService);
-            } catch (Exception error) {
-                Log.e(KEYCHAIN_MODULE, "Failed removing invalidated key: " + error.getMessage());
             }
-            promise.resolve(false);
-        } catch (CryptoFailedException e) {
-            Log.e(KEYCHAIN_MODULE, e.getMessage());
-            promise.reject(E_CRYPTO_FAILED, e);
-        }
+        });
     }
 
     @ReactMethod
