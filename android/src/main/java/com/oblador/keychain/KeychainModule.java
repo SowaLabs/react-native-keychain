@@ -92,8 +92,8 @@ public class KeychainModule extends ReactContextBaseJavaModule {
         mReactContext = reactContext;
 
         addCipherStorageToMap(new CipherStorageFacebookConceal(reactContext));
-        addCipherStorageToMap(new CipherStorageKeystoreAESCBC(reactContext));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            addCipherStorageToMap(new CipherStorageKeystoreAESCBC(reactContext));
             addCipherStorageToMap(new CipherStorageKeystoreRSAECB(reactContext));
         }
     }
