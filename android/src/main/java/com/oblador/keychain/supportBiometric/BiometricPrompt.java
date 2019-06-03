@@ -20,6 +20,7 @@ import static java.lang.annotation.RetentionPolicy.SOURCE;
 
 import android.app.Activity;
 import android.app.FragmentManager;
+import android.app.FragmentTransaction;
 import android.content.DialogInterface;
 import android.os.Build;
 import android.os.Bundle;
@@ -108,7 +109,7 @@ public class BiometricPrompt implements BiometricConstants, LifecycleEventListen
             } else {
                 // May be null if no authentication is occurring.
                 if (mFingerprintDialogFragment != null) {
-                    mFingerprintDialogFragment.dismiss();
+                    mFingerprintDialogFragment.dismissAllowingStateLoss();
                 }
                 if (mFingerprintHelperFragment != null) {
                     mFingerprintHelperFragment.cancel(
@@ -498,10 +499,10 @@ public class BiometricPrompt implements BiometricConstants, LifecycleEventListen
                 // If the fragment hasn't been added before, add it. It will also start the
                 // authentication.
                 fragmentManager.beginTransaction().add(mBiometricFragment, BIOMETRIC_FRAGMENT_TAG)
-                        .commit();
+                        .commitAllowingStateLoss();
             } else if (mBiometricFragment.isDetached()) {
                 // If it's been added before, just re-attach it.
-                fragmentManager.beginTransaction().attach(mBiometricFragment).commit();
+                fragmentManager.beginTransaction().attach(mBiometricFragment).commitAllowingStateLoss();
             }
         } else {
             // Create the UI
@@ -516,9 +517,9 @@ public class BiometricPrompt implements BiometricConstants, LifecycleEventListen
             mFingerprintDialogFragment.setNegativeButtonListener(mNegativeButtonListener);
             mFingerprintDialogFragment.setBundle(bundle);
             if (fingerprintDialogFragment == null) {
-                mFingerprintDialogFragment.show(fragmentManager, DIALOG_FRAGMENT_TAG);
+                fragmentManager.beginTransaction().add(mFingerprintDialogFragment, DIALOG_FRAGMENT_TAG).commitAllowingStateLoss();
             } else if (mFingerprintDialogFragment.isDetached()) {
-                fragmentManager.beginTransaction().attach(mFingerprintDialogFragment).commit();
+                fragmentManager.beginTransaction().attach(mFingerprintDialogFragment).commitAllowingStateLoss();
             }
 
             // Create the connection to FingerprintManager
@@ -542,10 +543,10 @@ public class BiometricPrompt implements BiometricConstants, LifecycleEventListen
                 // If the fragment hasn't been added before, add it. It will also start the
                 // authentication.
                 fragmentManager.beginTransaction()
-                        .add(mFingerprintHelperFragment, FINGERPRINT_HELPER_FRAGMENT_TAG).commit();
+                        .add(mFingerprintHelperFragment, FINGERPRINT_HELPER_FRAGMENT_TAG).commitAllowingStateLoss();
             } else if (mFingerprintHelperFragment.isDetached()) {
                 // If it's been added before, just re-attach it.
-                fragmentManager.beginTransaction().attach(mFingerprintHelperFragment).commit();
+                fragmentManager.beginTransaction().attach(mFingerprintHelperFragment).commitAllowingStateLoss();
             }
         }
         // For the case when onResume() is being called right after authenticate,
@@ -566,7 +567,7 @@ public class BiometricPrompt implements BiometricConstants, LifecycleEventListen
             if (mFingerprintHelperFragment != null && mFingerprintDialogFragment != null) {
                 mFingerprintHelperFragment.cancel(
                         FingerprintHelperFragment.USER_CANCELED_FROM_NONE);
-                mFingerprintDialogFragment.dismiss();
+                mFingerprintDialogFragment.dismissAllowingStateLoss();
             }
         }
     }

@@ -108,7 +108,7 @@ public class FingerprintDialogFragment extends DialogFragment {
                     handleDismissDialogError();
                     break;
                 case MSG_DISMISS_DIALOG_AUTHENTICATED:
-                    dismiss();
+                    dismissAllowingStateLoss();
                     break;
                 case MSG_RESET_MESSAGE:
                     handleResetMessage();
@@ -363,14 +363,14 @@ public class FingerprintDialogFragment extends DialogFragment {
         mHandler.postDelayed(new Runnable() {
             @Override
             public void run() {
-                dismiss();
+                dismissAllowingStateLoss();
             }
         }, HIDE_DIALOG_DELAY);
     }
 
     void handleDismissDialogError() {
         if (mDismissInstantly) {
-            dismiss();
+            dismissAllowingStateLoss();
         } else {
             dismissAfterDelay();
         }
